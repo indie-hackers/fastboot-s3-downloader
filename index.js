@@ -39,19 +39,45 @@ class S3Downloader {
 
     return this.fetchCurrentVersion()
       .then(() => this.removeOldApp())
+      .then(() => this.moveOldAppIntoHolding())
       .then(() => this.downloadAppZip())
-      .then(() => this.unzipApp(0))
+      .then(() => this.unzipApp())
+      .then(() => this.removeOldApp())
       .then(() => this.installNPMDependencies())
       .then(() => this.outputPath);
   }
 
-  removeOldApp() {
+  moveOldAppIntoHolding() {
     if (!this.outputPath) {
       return Promise.resolve();
     }
 
-    this.ui.writeLine('removing ' + this.outputPath);
-    return fsp.remove(this.outputPath);
+    this.originalPath = this.outputPath;
+    this.holdingPath = holdingPathFor(this.outputPath);
+
+    this.ui.writeLine('moving ' + this.originalPath + ' to ' + this.holdingPath);
+
+    return fsp.move(this.originalPath, this.holdingPath, { overwrite: true });
+  },
+
+  restoreOldAppFromHolding() {
+    if (!this.originalPath || !this.holdingPath) {
+      return Promise.resolve();
+    }
+
+    this.ui.writeLine('moving ' + this.holdingPath + ' to ' + this.originalPath);
+
+    return fsp.move(this.holdingPath, this.originalPath, { overwrite: true });
+  },
+
+  removeOldApp() {
+    if (!this.holdingPath) {
+      return Promise.resolve();
+    }
+
+    this.ui.writeLine('removing ' + this.holdingPath);
+
+    return fsp.remove(this.holdingPath);
   }
 
   fetchCurrentVersion() {
@@ -100,13 +126,16 @@ class S3Downloader {
   }
 
   unzipApp(attemptNumber) {
-    const zipPath = this.zipPath;
-
+    attemptNumber = attemptNumber || 1;
     if (attemptNumber > maxNumUnzipAttempts) {
-      const error = new Error('exceeded unzip attempt limit');
-      return Promise.reject(error);
+      return new Promise((resolve, reject) => {
+        this.restoreOldAppFromHolding().then(() => {
+          reject(new Error('exceeded unzip attempt limit'));
+        });
+      });
     }
 
+    const zipPath = this.zipPath;
     return this.exec('unzip ' + zipPath)
       .then(() => this.ui.writeLine("unzipped " + zipPath))
       .catch(() => this.unzipApp(attemptNumber + 1));
@@ -131,6 +160,10 @@ class S3Downloader {
       });
     });
   }
+}
+
+function holdingPathFor(path) {
+  return path + '-holding';
 }
 
 function outputPathFor(zipPath) {
