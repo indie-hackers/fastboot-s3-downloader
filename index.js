@@ -6,12 +6,15 @@ const path = require('path');
 const fsp  = require('fs-promise');
 const exec = require('child_process').exec;
 
+const maxNumUnzipAttempts = 5;
+
 function AppNotFoundError(message) {
   let error = new Error(message);
   error.name = 'AppNotFoundError';
 
   return error;
 }
+
 /*
  * Downloader class that downloads the latest version of the deployed
  * app from S3 and unzips it.
@@ -37,7 +40,7 @@ class S3Downloader {
     return this.fetchCurrentVersion()
       .then(() => this.removeOldApp())
       .then(() => this.downloadAppZip())
-      .then(() => this.unzipApp())
+      .then(() => this.unzipApp(0))
       .then(() => this.installNPMDependencies())
       .then(() => this.outputPath);
   }
@@ -96,13 +99,17 @@ class S3Downloader {
     });
   }
 
-  unzipApp() {
-    let zipPath = this.zipPath;
+  unzipApp(attemptNumber) {
+    const zipPath = this.zipPath;
+
+    if (attemptNumber > maxNumUnzipAttempts) {
+      const error = new Error('exceeded unzip attempt limit');
+      return Promise.reject(error);
+    }
 
     return this.exec('unzip ' + zipPath)
-      .then(() => {
-        this.ui.writeLine("unzipped " + zipPath);
-      });
+      .then(() => this.ui.writeLine("unzipped " + zipPath))
+      .catch(() => this.unzipApp(attemptNumber + 1));
   }
 
   installNPMDependencies() {
