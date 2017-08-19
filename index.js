@@ -54,9 +54,15 @@ class S3Downloader {
     this.originalPath = this.outputPath;
     this.holdingPath = holdingPathFor(this.outputPath);
 
-    this.ui.writeLine('moving ' + this.originalPath + ' to ' + this.holdingPath);
-
-    return fsp.move(this.originalPath, this.holdingPath, { overwrite: true });
+    return fsp.exists(this.originalPath)
+      .then(exists => {
+        if (exists) {
+          this.ui.writeLine('moving ' + this.originalPath + ' to ' + this.holdingPath);
+          return fsp.move(this.originalPath, this.holdingPath, { overwrite: true });
+        } else {
+          this.ui.writeLine('nothing at ' + this.originalPath + ' to move');
+        }
+      });
   }
 
   restoreOldAppFromHolding() {
@@ -64,9 +70,15 @@ class S3Downloader {
       return Promise.resolve();
     }
 
-    this.ui.writeLine('moving ' + this.holdingPath + ' to ' + this.originalPath);
-
-    return fsp.move(this.holdingPath, this.originalPath, { overwrite: true });
+    return fsp.exists(this.holdingPath)
+      .then(exists => {
+        if (exists) {
+          this.ui.writeLine('moving ' + this.holdingPath + ' to ' + this.originalPath);
+          return fsp.move(this.holdingPath, this.originalPath, { overwrite: true });
+        } else {
+          this.ui.writeLine('nothing at ' + this.holdingPath + ' to restore');
+        }
+      });
   }
 
   removeOldApp() {
