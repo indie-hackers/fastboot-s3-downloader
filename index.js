@@ -38,7 +38,6 @@ class S3Downloader {
     }
 
     return this.fetchCurrentVersion()
-      .then(() => this.removeOldApp())
       .then(() => this.moveOldAppIntoHolding())
       .then(() => this.downloadAppZip())
       .then(() => this.unzipApp())
